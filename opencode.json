@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "server": {
+    "port": 8888,
+    "hostname": "0.0.0.0"
+  },
+  "permission": {
+    "*": "ask"
+  }
+}
