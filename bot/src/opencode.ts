@@ -13,6 +13,8 @@ interface MessagePart {
 
 interface SessionMessageResponse {
   parts?: MessagePart[];
+  response?: string;
+  message?: string;
   [key: string]: unknown;
 }
 
@@ -73,34 +75,50 @@ const deleteAllSessions = async (baseUrl: string): Promise<void> => {
   }
 };
 
-/** Извлекает текст ответа из структуры parts в payload OpenCode. */
-const extractTextFromParts = (parts: unknown): string => {
-  const texts: string[] = [];
+const cleanupServiceLines = (text: string): string => {
+  const noise = [
+    /^[a-f0-9]{32,}$/i,
+    /^(step-start|step-finish|reasoning|text|stop)$/i,
+    /^(prt|ses|msg)_[A-Za-z0-9]+$/,
+  ];
 
-  const walk = (value: unknown): void => {
-    if (!value) return;
-    if (typeof value === "string") {
-      texts.push(value);
-      return;
-    }
-    if (Array.isArray(value)) {
-      for (const item of value) walk(item);
-      return;
-    }
-    if (typeof value === "object") {
-      const obj = value as Record<string, unknown>;
-      if (typeof obj.text === "string") {
-        texts.push(obj.text);
-      }
-      for (const next of Object.values(obj)) {
-        if (next !== obj.text) walk(next);
-      }
-    }
-  };
+  const cleaned = text
+    .split("\n")
+    .filter((line) => {
+      const value = line.trim();
+      if (!value) return false;
+      return !noise.some((pattern) => pattern.test(value));
+    })
+    .join("\n")
+    .trim();
 
-  walk(parts);
-  const output = texts.join("\n").trim();
-  return output.length > 0 ? output : "Пустой ответ от Opencode";
+  return cleaned;
+};
+
+/** Извлекает финальный пользовательский ответ и убирает служебные данные/размышления. */
+const extractTextFromPayload = (data: SessionMessageResponse): string => {
+  if (Array.isArray(data.parts)) {
+    const textParts = data.parts
+      .filter((part) => {
+        if (!part || typeof part !== "object") return false;
+        const type = typeof part.type === "string" ? part.type.toLowerCase() : "";
+        if (type.includes("reason")) return false;
+        return type === "text" || type === "output_text" || type === "final";
+      })
+      .map((part) => (typeof part.text === "string" ? part.text.trim() : ""))
+      .filter((text) => text.length > 0);
+
+    if (textParts.length > 0) {
+      const finalText = cleanupServiceLines(textParts[textParts.length - 1]);
+      if (finalText.length > 0) return finalText;
+    }
+  }
+
+  const fallbackRaw =
+    (typeof data.response === "string" ? data.response : "") ||
+    (typeof data.message === "string" ? data.message : "");
+  const fallback = cleanupServiceLines(fallbackRaw);
+  return fallback.length > 0 ? fallback : "Пустой ответ от Opencode";
 };
 
 /** Отправляет prompt в конкретную сессию и возвращает итоговый текст ответа модели. */
@@ -123,7 +141,7 @@ const sendMessageToSession = async (
     body
   );
 
-  return extractTextFromParts(data.parts ?? data);
+  return extractTextFromPayload(data);
 };
 
 export {

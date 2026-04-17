@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { Bot, type Context, type CommandContext } from "grammy";
 import type { UserSession } from "./types";
 import {
@@ -7,6 +8,7 @@ import {
   formatStart,
   buildAnalyzePrompt,
 } from "./utils";
+import { extractTranscript } from "./transcript";
 import {
   delay,
   createSession,
@@ -20,6 +22,11 @@ const bot = new Bot(config.TELEGRAM_TOKEN);
 
 const SESSION_READY_DELAY_MS = 3000;
 const HISTORY_LIMIT = 10;
+const TELEGRAM_SINGLE_MESSAGE_LIMIT = 3900;
+const AGENT_OUTPUT_POLICY =
+  "Отвечай строго на русском языке.\n" +
+  "Возвращай только финальный ответ пользователю.\n" +
+  "Никогда не показывай reasoning, chain-of-thought, служебные шаги, ID, хэши, события и любые технические метаданные.";
 
 const chatState: UserSession & { agentSessionId?: string } = {
   history: [],
@@ -43,6 +50,14 @@ const trimHistory = (): void => {
   if (chatState.history.length > HISTORY_LIMIT) {
     chatState.history = chatState.history.slice(-HISTORY_LIMIT);
   }
+};
+
+/** Гарантирует, что ответ отправится одним сообщением в лимит Telegram. */
+const fitSingleTelegramMessage = (text: string): string => {
+  const normalized = text.trim();
+  if (!normalized) return "Пустой ответ";
+  if (normalized.length <= TELEGRAM_SINGLE_MESSAGE_LIMIT) return normalized;
+  return `${normalized.slice(0, TELEGRAM_SINGLE_MESSAGE_LIMIT - 1)}…`;
 };
 
 /** Добавляет пару user/assistant в локальную историю и применяет лимит. */
@@ -139,29 +154,33 @@ const runVideoFlow = async (
   ctx: Context | CommandContext<Context>,
   youtubeUrl: string
 ): Promise<void> => {
-  await ctx.reply("⏳ Анализирую видео...");
+  await ctx.reply("⏳ Получаю transcript и анализирую видео...");
 
   let videoSessionId: string | undefined;
   try {
     resetLocalHistory();
     await closeAllAgentSessions();
 
+    const transcriptPayload = await extractTranscript(youtubeUrl);
+
     const session = await createSession(config.OPENCODE_URL, "telegram-video-analysis");
     videoSessionId = session.id;
     await delay(SESSION_READY_DELAY_MS);
 
-    const prompt = buildAnalyzePrompt(
-      youtubeUrl,
-      chatState.criteria,
-      chatState.interests
-    );
+    const prompt =
+      `${AGENT_OUTPUT_POLICY}\n\n` +
+      buildAnalyzePrompt(
+        transcriptPayload,
+        chatState.criteria,
+        chatState.interests
+      );
 
     const result = await sendMessageToSession(
       videoSessionId,
       prompt,
       config.OPENCODE_URL
     );
-    await ctx.reply(result);
+    await ctx.reply(fitSingleTelegramMessage(result));
 
     await deleteSession(videoSessionId, config.OPENCODE_URL);
     videoSessionId = undefined;
@@ -184,8 +203,9 @@ const runVideoFlow = async (
 const runChatFlow = async (ctx: Context, text: string): Promise<void> => {
   try {
     const sessionId = await ensureChatAgentSession();
-    const result = await sendMessageToSession(sessionId, text, config.OPENCODE_URL);
-    await ctx.reply(result);
+    const prompt = `${AGENT_OUTPUT_POLICY}\n\nЗапрос пользователя:\n${text}`;
+    const result = await sendMessageToSession(sessionId, prompt, config.OPENCODE_URL);
+    await ctx.reply(fitSingleTelegramMessage(result));
     appendHistory(text, result);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
