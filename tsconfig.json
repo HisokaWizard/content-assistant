@@ -3,8 +3,7 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "noEmit": true,
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,6 +11,6 @@
     "declaration": true,
     "types": ["node"]
   },
-  "include": ["src/**/*"],
+  "include": ["deploy.ts"],
   "exclude": ["node_modules", "dist"]
 }

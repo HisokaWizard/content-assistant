@@ -22,11 +22,12 @@ const bot = new Bot(config.TELEGRAM_TOKEN);
 
 const SESSION_READY_DELAY_MS = 3000;
 const HISTORY_LIMIT = 10;
-const TELEGRAM_SINGLE_MESSAGE_LIMIT = 3900;
+const TELEGRAM_SINGLE_MESSAGE_LIMIT = 3000;
 const AGENT_OUTPUT_POLICY =
   "Отвечай строго на русском языке.\n" +
   "Возвращай только финальный ответ пользователю.\n" +
-  "Никогда не показывай reasoning, chain-of-thought, служебные шаги, ID, хэши, события и любые технические метаданные.";
+  "Никогда не показывай reasoning, chain-of-thought, служебные шаги, ID, хэши, события и любые технические метаданные.\n" +
+  "ОТВЕТ ДОЛЖЕН УМЕЩАТЬСЯ В 3000 СИМВОЛОВ. Это жесткий лимит. Не обрезай, а сокращай содержание.";
 
 const chatState: UserSession & { agentSessionId?: string } = {
   history: [],
