@@ -1,32 +1,33 @@
-import "dotenv/config";
-import { Bot, type Context, type CommandContext } from "grammy";
-import type { UserSession } from "./types";
+import 'dotenv/config';
+import { Bot, type Context, type CommandContext } from 'grammy';
+import type { UserSession } from './types.js';
 import {
   extractYouTubeUrl,
   getEnvConfig,
   formatHelp,
   formatStart,
   buildAnalyzePrompt,
-} from "./utils";
-import { extractTranscript } from "./transcript";
+} from './utils.js';
+import { extractTranscript } from './transcript.js';
 import {
   delay,
   createSession,
   deleteAllSessions,
   deleteSession,
   sendMessageToSession,
-} from "./opencode";
+} from './opencode.js';
 
 const config = getEnvConfig();
 const bot = new Bot(config.TELEGRAM_TOKEN);
 
 const SESSION_READY_DELAY_MS = 3000;
 const HISTORY_LIMIT = 10;
-const TELEGRAM_SINGLE_MESSAGE_LIMIT = 3900;
+const TELEGRAM_SINGLE_MESSAGE_LIMIT = 3000;
 const AGENT_OUTPUT_POLICY =
-  "Отвечай строго на русском языке.\n" +
-  "Возвращай только финальный ответ пользователю.\n" +
-  "Никогда не показывай reasoning, chain-of-thought, служебные шаги, ID, хэши, события и любые технические метаданные.";
+  'Отвечай строго на русском языке.\n' +
+  'Возвращай только финальный ответ пользователю.\n' +
+  'Никогда не показывай reasoning, chain-of-thought, служебные шаги, ID, хэши, события и любые технические метаданные.\n' +
+  'ОТВЕТ ДОЛЖЕН УМЕЩАТЬСЯ В 3000 СИМВОЛОВ. Это жесткий лимит. Не обрезай, а сокращай содержание.';
 
 const chatState: UserSession & { agentSessionId?: string } = {
   history: [],
@@ -39,7 +40,7 @@ const enqueue = async (task: () => Promise<void>): Promise<void> => {
   const next = queue.then(task, task);
   queue = next.then(
     () => undefined,
-    () => undefined
+    () => undefined,
   );
   await next;
 };
@@ -55,7 +56,7 @@ const trimHistory = (): void => {
 /** Гарантирует, что ответ отправится одним сообщением в лимит Telegram. */
 const fitSingleTelegramMessage = (text: string): string => {
   const normalized = text.trim();
-  if (!normalized) return "Пустой ответ";
+  if (!normalized) return 'Пустой ответ';
   if (normalized.length <= TELEGRAM_SINGLE_MESSAGE_LIMIT) return normalized;
   return `${normalized.slice(0, TELEGRAM_SINGLE_MESSAGE_LIMIT - 1)}…`;
 };
@@ -91,7 +92,7 @@ const ensureChatAgentSession = async (): Promise<string> => {
   if (chatState.agentSessionId) return chatState.agentSessionId;
 
   await closeAllAgentSessions();
-  const session = await createSession(config.OPENCODE_URL, "telegram-chat");
+  const session = await createSession(config.OPENCODE_URL, 'telegram-chat');
   chatState.agentSessionId = session.id;
   await delay(SESSION_READY_DELAY_MS);
   return session.id;
@@ -99,20 +100,20 @@ const ensureChatAgentSession = async (): Promise<string> => {
 
 /** Обработчик команды /start. */
 const handleStart = async (ctx: CommandContext<Context>): Promise<void> => {
-  await ctx.reply(formatStart(), { parse_mode: "Markdown" });
+  await ctx.reply(formatStart(), { parse_mode: 'Markdown' });
 };
 
 /** Обработчик команды /help. */
 const handleHelp = async (ctx: CommandContext<Context>): Promise<void> => {
-  await ctx.reply(formatHelp(), { parse_mode: "Markdown" });
+  await ctx.reply(formatHelp(), { parse_mode: 'Markdown' });
 };
 
 /** Обработчик /analyze: валидирует URL и запускает поток видео-анализа. */
 const handleAnalyze = async (ctx: CommandContext<Context>): Promise<void> => {
-  const args = ctx.message?.text?.replace("/analyze", "").trim() ?? "";
+  const args = ctx.message?.text?.replace('/analyze', '').trim() ?? '';
   const youtubeUrl = extractYouTubeUrl(args);
   if (!youtubeUrl) {
-    await ctx.reply("⚠️ Укажи ссылку на YouTube видео");
+    await ctx.reply('⚠️ Укажи ссылку на YouTube видео');
     return;
   }
   await runVideoFlow(ctx, youtubeUrl);
@@ -120,9 +121,9 @@ const handleAnalyze = async (ctx: CommandContext<Context>): Promise<void> => {
 
 /** Обработчик /interests: сохраняет интересы пользователя для видео-анализа. */
 const handleInterests = async (ctx: CommandContext<Context>): Promise<void> => {
-  const args = ctx.message?.text?.replace("/interests", "").trim() ?? "";
+  const args = ctx.message?.text?.replace('/interests', '').trim() ?? '';
   if (!args) {
-    await ctx.reply("⚠️ Укажи интересы: /interests crypto, AI, технологии");
+    await ctx.reply('⚠️ Укажи интересы: /interests crypto, AI, технологии');
     return;
   }
   chatState.interests = args;
@@ -131,9 +132,9 @@ const handleInterests = async (ctx: CommandContext<Context>): Promise<void> => {
 
 /** Обработчик /criteria: сохраняет критерии оценки для видео-анализа. */
 const handleCriteria = async (ctx: CommandContext<Context>): Promise<void> => {
-  const args = ctx.message?.text?.replace("/criteria", "").trim() ?? "";
+  const args = ctx.message?.text?.replace('/criteria', '').trim() ?? '';
   if (!args) {
-    await ctx.reply("⚠️ Укажи критерии: /criteria короткие видео, полезные факты");
+    await ctx.reply('⚠️ Укажи критерии: /criteria короткие видео, полезные факты');
     return;
   }
   chatState.criteria = args;
@@ -146,15 +147,15 @@ const handleClear = async (ctx: CommandContext<Context>): Promise<void> => {
   chatState.interests = undefined;
   resetLocalHistory();
   await closeAllAgentSessions();
-  await ctx.reply("✅ Контекст очищен, сессии агента закрыты.");
+  await ctx.reply('✅ Контекст очищен, сессии агента закрыты.');
 };
 
 /** Полный цикл видео-анализа: cleanup -> новая сессия -> задержка -> запрос -> удаление сессии. */
 const runVideoFlow = async (
   ctx: Context | CommandContext<Context>,
-  youtubeUrl: string
+  youtubeUrl: string,
 ): Promise<void> => {
-  await ctx.reply("⏳ Получаю transcript и анализирую видео...");
+  await ctx.reply('⏳ Получаю transcript и анализирую видео...');
 
   let videoSessionId: string | undefined;
   try {
@@ -163,29 +164,21 @@ const runVideoFlow = async (
 
     const transcriptPayload = await extractTranscript(youtubeUrl);
 
-    const session = await createSession(config.OPENCODE_URL, "telegram-video-analysis");
+    const session = await createSession(config.OPENCODE_URL, 'telegram-video-analysis');
     videoSessionId = session.id;
     await delay(SESSION_READY_DELAY_MS);
 
     const prompt =
       `${AGENT_OUTPUT_POLICY}\n\n` +
-      buildAnalyzePrompt(
-        transcriptPayload,
-        chatState.criteria,
-        chatState.interests
-      );
+      buildAnalyzePrompt(transcriptPayload, chatState.criteria, chatState.interests);
 
-    const result = await sendMessageToSession(
-      videoSessionId,
-      prompt,
-      config.OPENCODE_URL
-    );
+    const result = await sendMessageToSession(videoSessionId, prompt, config.OPENCODE_URL);
     await ctx.reply(fitSingleTelegramMessage(result));
 
     await deleteSession(videoSessionId, config.OPENCODE_URL);
     videoSessionId = undefined;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : 'Unknown error';
     await ctx.reply(`❌ Ошибка анализа видео: ${message}`);
   } finally {
     if (videoSessionId) {
@@ -208,15 +201,15 @@ const runChatFlow = async (ctx: Context, text: string): Promise<void> => {
     await ctx.reply(fitSingleTelegramMessage(result));
     appendHistory(text, result);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : 'Unknown error';
     await ctx.reply(`❌ Ошибка чата: ${message}`);
   }
 };
 
 /** Роутер текстовых сообщений: видео-ссылка уходит в видео-flow, остальное в chat-flow. */
 const handleMessage = async (ctx: Context): Promise<void> => {
-  const text = ctx.message?.text ?? "";
-  if (text.startsWith("/")) return;
+  const text = ctx.message?.text ?? '';
+  if (text.startsWith('/')) return;
 
   const youtubeUrl = extractYouTubeUrl(text);
   if (youtubeUrl) {
@@ -226,15 +219,15 @@ const handleMessage = async (ctx: Context): Promise<void> => {
   await runChatFlow(ctx, text);
 };
 
-bot.command("start", (ctx) => enqueue(() => handleStart(ctx)));
-bot.command("help", (ctx) => enqueue(() => handleHelp(ctx)));
-bot.command("analyze", (ctx) => enqueue(() => handleAnalyze(ctx)));
-bot.command("interests", (ctx) => enqueue(() => handleInterests(ctx)));
-bot.command("criteria", (ctx) => enqueue(() => handleCriteria(ctx)));
-bot.command("clear", (ctx) => enqueue(() => handleClear(ctx)));
+bot.command('start', (ctx) => enqueue(() => handleStart(ctx)));
+bot.command('help', (ctx) => enqueue(() => handleHelp(ctx)));
+bot.command('analyze', (ctx) => enqueue(() => handleAnalyze(ctx)));
+bot.command('interests', (ctx) => enqueue(() => handleInterests(ctx)));
+bot.command('criteria', (ctx) => enqueue(() => handleCriteria(ctx)));
+bot.command('clear', (ctx) => enqueue(() => handleClear(ctx)));
 
-bot.on("message:text", (ctx) => enqueue(() => handleMessage(ctx)));
+bot.on('message:text', (ctx) => enqueue(() => handleMessage(ctx)));
 
 bot.start();
 
-console.log("🤖 Bot started. Press Ctrl+C to stop.");
+console.log('🤖 Bot started. Press Ctrl+C to stop.');

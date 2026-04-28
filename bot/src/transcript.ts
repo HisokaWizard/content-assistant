@@ -7,6 +7,8 @@ import type { TranscriptExtractionResult, VideoMetadata } from "./types";
 
 const execFileAsync = promisify(execFile);
 
+const YTDLP_PATH =
+  process.env.YTDLP_PATH || "/opt/homebrew/bin/yt-dlp";
 const YTDLP_TIMEOUT_MS = 120_000;
 const TRANSCRIPT_MIN_CHARS = 300;
 const TRANSCRIPT_MAX_CHARS = 120_000;
@@ -32,9 +34,11 @@ interface RunnerOptions {
 /** Проверяет, установлен ли yt-dlp в системе. */
 const ensureYtDlpInstalled = async (): Promise<void> => {
   try {
-    await execFileAsync("yt-dlp", ["--version"], { timeout: 15_000 });
+    await execFileAsync(YTDLP_PATH, ["--version"], { timeout: 15_000 });
   } catch {
-    throw new Error("yt-dlp не установлен. Установи: brew install yt-dlp");
+    throw new Error(
+      `yt-dlp не найден по пути ${YTDLP_PATH}. Установи: brew install yt-dlp`
+    );
   }
 };
 
@@ -123,7 +127,7 @@ const runYtDlp = async (
   );
   try {
     const finalArgs = withAuthArgs(args, options);
-    return await execFileAsync("yt-dlp", finalArgs, {
+    return await execFileAsync(YTDLP_PATH, finalArgs, {
       timeout: YTDLP_TIMEOUT_MS,
       maxBuffer: 10 * 1024 * 1024,
     });

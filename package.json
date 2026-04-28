@@ -1,0 +1,18 @@
+{
+  "type": "module",
+  "scripts": {
+    "deploy": "tsx deploy.ts",
+    "opencode": "OPENCODE_MODEL=opencode/minimax-m2.5-free opencode serve --port 8888 --hostname 0.0.0.0",
+    "bot": "cd bot && npm start"
+  },
+  "dependencies": {
+    "dotenv": "^17.4.2",
+    "execa": "^9.6.1",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  }
+}
